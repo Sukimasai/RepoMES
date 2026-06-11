@@ -1,15 +1,38 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // If you get an error about driver adapters, uncomment the line below:
+  // previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // In Prisma 7, connection URLs are moved to prisma.config.ts
 }
 
-enum EventStatus { UPCOMING, ONGOING, FINISHED }
-enum BoothStatus { CONFIRMED, TBA }
-enum POStatus { UPCOMING, ACTIVE, CLOSED }
+// ==========================================
+// ENUMS (Fixed multi-line syntax)
+// ==========================================
+
+enum EventStatus {
+  UPCOMING
+  ONGOING
+  FINISHED
+}
+
+enum BoothStatus {
+  CONFIRMED
+  TBA
+}
+
+enum POStatus {
+  UPCOMING
+  ACTIVE
+  CLOSED
+}
+
+// ==========================================
+// MODELS
+// ==========================================
 
 model Event {
   id          String        @id @default(uuid())
