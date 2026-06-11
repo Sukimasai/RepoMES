@@ -1,0 +1,197 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum UserRole {
+  SUPER_ADMIN
+  EVENT_ORGANIZER
+  VENDOR
+  USER
+} // [cite: 696, 697, 698, 699, 700]
+
+enum EventStatus {
+  UPCOMING
+  ONGOING
+  FINISHED
+} // [cite: 194, 195, 196, 197]
+
+enum BoothStatus {
+  CONFIRMED
+  TBA
+} // [cite: 205, 206, 207]
+
+enum MerchandiseType {
+  ACRYLIC_STAND
+  ACRYLIC_KEYCHAIN
+  STICKER
+  POSTER
+  ART_PRINT
+  ARTBOOK
+  TOTE_BAG
+  T_SHIRT
+  DAKIMAKURA
+  PHOTOCARD
+  PIN_BADGE
+  PLUSHIE
+  LANYARD
+  NOTEBOOK
+  OTHER
+} // [cite: 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226]
+
+enum SalesStatus {
+  PO_ONLY
+  OTS_ONLY
+  PO_OTS
+  SOLD_OUT
+  COMING_SOON
+} // [cite: 227, 228, 229, 230, 231, 232]
+
+enum FandomCategory {
+  ANIME
+  GAME
+  VTUBER
+  ORIGINAL_CHARACTER
+  MANGA
+  OTHERS
+} // [cite: 236, 237, 238, 239, 240, 241, 242]
+
+enum POStatus {
+  UPCOMING
+  ACTIVE
+  CLOSED
+} // [cite: 246, 247, 248, 249]
+
+// ==========================================
+// MODELS
+// ==========================================
+
+// Future-proofing Auth/RBAC for Auth.js integration
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String?  // Nullable if using OAuth [cite: 693]
+  name      String?
+  role      UserRole @default(USER) // [cite: 696]
+  
+  // Relations linking user to vendor/EO profiles
+  vendorProfile Vendor?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Event {
+  id            String   @id @default(uuid()) // [cite: 193]
+  name          String   // [cite: 193]
+  location      String   // [cite: 193]
+  city          String   // [cite: 193]
+  country       String   // [cite: 193]
+  startDate     DateTime // [cite: 193]
+  endDate       DateTime // [cite: 193]
+  bannerUrl     String?  // Stored in Cloudflare R2 [cite: 193, 610, 613]
+  websiteUrl    String?  // [cite: 193]
+  status        EventStatus @default(UPCOMING) // [cite: 193]
+  
+  // Relations
+  vendorEvents  VendorEvent[]
+  preOrders     PreOrder[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Vendor {
+  id            String   @id @default(uuid()) // [cite: 200]
+  name          String   // [cite: 200]
+  logoUrl       String?  // Stored in Cloudflare R2 [cite: 200, 610, 614]
+  description   String?  @db.Text // [cite: 200]
+  storeUrl      String?  // [cite: 200]
+  socialUrl     String?  // [cite: 200]
+  
+  // Link to User account (for Claim Vendor feature) [cite: 435, 439]
+  userId        String?  @unique
+  user          User?    @relation(fields: [userId], references: [id])
+
+  // Relations
+  vendorEvents  VendorEvent[]
+  merchandises  Merchandise[]
+  preOrders     PreOrder[]
+
+  createdAt     DateTime @default(now()) // [cite: 200]
+  updatedAt     DateTime @updatedAt
+}
+
+// Explicit Many-to-Many Relation between Event and Vendor 
+// Allows tracking specific booth and PO details per event [cite: 201, 202]
+model VendorEvent {
+  id            String   @id @default(uuid()) // [cite: 204]
+  vendorId      String   // [cite: 204]
+  eventId       String   // [cite: 204]
+  boothNumber   String?  // [cite: 204]
+  boothStatus   BoothStatus @default(TBA) // [cite: 204]
+  poAvailable   Boolean  @default(false) // [cite: 204]
+  poLink        String?  // [cite: 204]
+
+  // Relations
+  vendor        Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  // Unique constraint ensures a vendor is only added once per event 
+  @@unique([vendorId, eventId]) 
+}
+
+model Merchandise {
+  id            String   @id @default(uuid()) // [cite: 210]
+  vendorId      String   // [cite: 210]
+  name          String   // [cite: 210]
+  type          MerchandiseType // [cite: 210]
+  price         Decimal  @db.Decimal(10, 2) // [cite: 210]
+  description   String?  @db.Text // [cite: 210]
+  imageUrl      String?  // Stored in Cloudflare R2 [cite: 210, 610, 615]
+  salesStatus   SalesStatus @default(PO_OTS) // [cite: 210]
+  poLink        String?  // [cite: 210]
+
+  // Relations
+  vendor        Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  
+  // Implicit Many-to-Many with Fandom 
+  fandoms       Fandom[] 
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Fandom {
+  id            String   @id @default(uuid()) // [cite: 235]
+  name          String   @unique // [cite: 235]
+  category      FandomCategory // [cite: 235]
+
+  // Relations
+  merchandises  Merchandise[] // Implicit M2M 
+}
+
+model PreOrder {
+  id            String   @id @default(uuid()) // [cite: 245]
+  vendorId      String   // [cite: 245]
+  eventId       String   // [cite: 245]
+  startDate     DateTime // [cite: 245]
+  endDate       DateTime // [cite: 245]
+  poUrl         String   // [cite: 245]
+  status        POStatus @default(UPCOMING) // System auto-calculated later [cite: 245, 486]
+
+  // Relations
+  vendor        Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
